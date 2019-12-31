@@ -1,66 +1,96 @@
+// run: npm install express ejs
+
 var express = require("express");
 
 var app = express();
-
 app.use(express.static("public"));
+
+var bodyParser = require('body-parser');
+
+// Create application/x-www-form-urlencoded parser
+var urlencodedParser = bodyParser.urlencoded({extended: false});
 
 app.set("view engine", "ejs");
 app.set("views", "./views");
 
 app.listen(3000);
 
+const YOUR_ZENDESK_EMAIL = '110115021@sv.tvu.edu.vn';
+const YOUR_ZENDESK_URL = 'https://hongkim.zendesk.com';
+const YOUR_ZENDESK_API_TOKEN = '9db6gA9PyX8kmoThYWdCrQZgBJKDAE0g2e7NNAjV';
 
-var zendesk = require('node-zendesk');
+// install package: npm install zendesk-node-api
+const Zendesk = require('zendesk-node-api');
 
-const email = '110115021@sv.tvu.edu.vn';
-const zendeskSubdomain = 'https://hongkim.zendesk.com/api/v2';
-const zendeskAdminToken = '9db6gA9PyX8kmoThYWdCrQZgBJKDAE0g2e7NNAjV';
-
-var client = zendesk.createClient({
-    username:  email,
-    token:     zendeskAdminToken,
-    remoteUri: zendeskSubdomain,
-
+const zendesk = new Zendesk({
+    url: YOUR_ZENDESK_URL,
+    email: YOUR_ZENDESK_EMAIL,
+    token: YOUR_ZENDESK_API_TOKEN
 });
 
-
-var ticket = {
-    "ticket":
-        {
-            "subject":"My printer is on fire!",
-            "comment": {
-                "body": "The smoke is very colorful."
-            }
-        }
-};
-
-client.tickets.create(ticket,  function(err, req, result) {
-    if (err) return handleError(err);
-    //console.log(JSON.stringify(result, null, 2, true));
-});
-
-function handleError(err) {
-    console.log(err);
-    process.exit(-1);
+async function getDetail(id) {
+    return await zendesk.tickets.show(id);
 }
 
-client.tickets.list(function (err, statusList, body, responseList, resultList) {
-    if (err) {
+async function getList(filter) {
+    return await zendesk.tickets.list(filter);
+}
+
+async function createTicket(ticket) {
+    return await zendesk.tickets.create(ticket).catch(function (err) {
         console.log(err);
-        return;
-    }
-    //console.log(JSON.stringify(body, null, 2, true));//will display all tickets
+    });
+}
+
+async function updateTicket(id, ticket) {
+    return await zendesk.tickets.update(id, ticket).catch(function (err) {
+        console.log(err);
+    });
+}
+
+app.get("/", function (request, response) {
+    response.render("home");
 });
 
-app.get("/", function(request, response)   {
-    let body = client.tickets.list(function (err, statusList, body, responseList, resultList) {
-        if (err) {
-            console.log(err);
-            return;
-        }
-        //console.log(JSON.stringify(body, null, 2, true));//will display all tickets
+app.get("/detail/:id", function (request, response) {
+    getDetail(request.params.id).then(function (data) {
+        console.log(data);
+        response.status(200).json(data);
     });
-    console.log(body)
-    let render = response.render("home");
+});
+
+app.post('/create', urlencodedParser, function (request, response) {
+    const ticket = {
+        subject: request.body.subject,
+        comment: {
+            body: request.body.description
+        }
+    };
+
+    createTicket(ticket).then(function (data) {
+        console.log(data);
+        response.status(200).json(data);
+    });
+});
+
+app.post("/update/:id", urlencodedParser, function (request, response) {
+    const ticket = {
+        subject: request.body.subject,
+        comment: {
+            body: request.body.description
+        }
+    };
+
+    updateTicket(request.params.id, ticket).then(function (data) {
+        console.log(data);
+        response.status(200).json(data);
+    });
+});
+
+app.get("/list", function (request, response) {
+    getList('sort_by=status&sort_order=desc').then(function (data) {
+        console.log(data);
+        response.status(200).json(data);
+    });
 });
 
